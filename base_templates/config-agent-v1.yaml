@@ -1,0 +1,152 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.config-agent-v1
+  annotations:
+    description: "Config agent operations — run-task and run-agent using kubectl exec"
+spec:
+  templates:
+
+  # ── run-task ──────────────────────────────────────────────────────────────────
+  # Run a named task on all pods matching component_role label.
+  # task_name is passed as a parameter — the pod must understand it
+  # (e.g. run a script named /usr/local/bin/<task_name> inside the container).
+  - name: run-task
+    inputs:
+      parameters:
+      - name: target_id
+      - name: component_role
+      - name: task_name
+        default: "reload_config"
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: COMPONENT_ROLE
+        value: "{{inputs.parameters.component_role}}"
+      - name: TASK_NAME
+        value: "{{inputs.parameters.task_name}}"
+      source: |
+        set -e
+        case "$TARGET_ID" in
+          ""|*[!a-z0-9.-]*) echo "[run-task] ERROR: invalid target_id"; exit 1 ;;
+        esac
+        case "$COMPONENT_ROLE" in
+          ""|*[!A-Za-z0-9_.-]*) echo "[run-task] ERROR: invalid component_role"; exit 1 ;;
+        esac
+        case "$TASK_NAME" in
+          ""|*[!A-Za-z0-9_-]*) echo "[run-task] ERROR: invalid task_name"; exit 1 ;;
+        esac
+
+        echo "[run-task] target_id=$TARGET_ID"
+        echo "[run-task] component_role=$COMPONENT_ROLE"
+        echo "[run-task] task_name=$TASK_NAME"
+
+        PODS=$(kubectl get pods \
+          -l "app=$TARGET_ID,component=$COMPONENT_ROLE" \
+          -o jsonpath='{.items[*].metadata.name}')
+
+        if [ -z "$PODS" ]; then
+          PODS=$(kubectl get pods \
+            -l "app=$TARGET_ID" \
+            -o jsonpath='{.items[*].metadata.name}')
+        fi
+
+        if [ -z "$PODS" ]; then
+          echo "[run-task] ERROR: no pods found for target_id=$TARGET_ID"
+          exit 1
+        fi
+
+        TASK_PATH="/usr/local/bin/$TASK_NAME"
+        echo "[run-task] pods found: $PODS"
+        FAILED=0
+        for POD in $PODS; do
+          echo "[run-task] running task on pod: $POD"
+          if kubectl exec "$POD" -- test -x "$TASK_PATH"; then
+            kubectl exec "$POD" -- "$TASK_PATH" || FAILED=1
+          else
+            echo "[run-task] task not found; sending SIGHUP"
+            kubectl exec "$POD" -- sh -c 'kill -HUP 1' || FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -eq 1 ]; then
+          echo "[run-task] ERROR: task failed on one or more pods"
+          exit 1
+        fi
+        echo "[run-task] task completed on all pods"
+
+  # ── run-agent ─────────────────────────────────────────────────────────────────
+  # Trigger config agent (e.g. reload nginx config) on all pods matching the label.
+  # For nginx: sends SIGHUP to reload config without downtime.
+  - name: run-agent
+    inputs:
+      parameters:
+      - name: target_id
+      - name: component_role
+        default: ""
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: COMPONENT_ROLE
+        value: "{{inputs.parameters.component_role}}"
+      source: |
+        set -e
+        case "$TARGET_ID" in
+          ""|*[!a-z0-9.-]*) echo "[run-agent] ERROR: invalid target_id"; exit 1 ;;
+        esac
+        case "$COMPONENT_ROLE" in
+          *[!A-Za-z0-9_.-]*) echo "[run-agent] ERROR: invalid component_role"; exit 1 ;;
+        esac
+        echo "[run-agent] target_id=$TARGET_ID"
+        echo "[run-agent] component_role=$COMPONENT_ROLE"
+
+        SELECTOR="app=$TARGET_ID"
+        if [ -n "$COMPONENT_ROLE" ]; then
+          SELECTOR="${SELECTOR},component=$COMPONENT_ROLE"
+        fi
+
+        PODS=$(kubectl get pods -l "$SELECTOR" -o jsonpath='{.items[*].metadata.name}')
+        if [ -z "$PODS" ]; then
+          echo "[run-agent] ERROR: no pods found for selector: $SELECTOR"
+          exit 1
+        fi
+
+        echo "[run-agent] pods: $PODS"
+        FAILED=0
+        for POD in $PODS; do
+          echo "[run-agent] reloading config on pod: $POD"
+          # Send SIGHUP to PID 1 — works for nginx and most daemons that support reload
+          kubectl exec "$POD" -- sh -c 'kill -HUP 1' || FAILED=1
+        done
+
+        if [ "$FAILED" -eq 1 ]; then
+          echo "[run-agent] ERROR: agent failed on one or more pods"
+          exit 1
+        fi
+        echo "[run-agent] config agent completed on all pods"
+    retryStrategy:
+      limit: "1"
+      retryPolicy: Always
+      backoff:
+        duration: 30s
+        factor: "2"

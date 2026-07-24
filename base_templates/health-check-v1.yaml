@@ -1,0 +1,83 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.health-check-v1
+  annotations:
+    description: "Health check — pod readiness via kubectl or HTTP GET health endpoint"
+spec:
+  templates:
+
+  # ── check ─────────────────────────────────────────────────────────────────────
+  # Verify target health before or after a change.
+  # When health_url is empty: checks all pods are Running and Ready via kubectl.
+  # When health_url is provided: HTTP GET to that endpoint, expects expected_status.
+  - name: check
+    inputs:
+      parameters:
+      - name: target_id
+      - name: health_url
+        default: ""
+      - name: expected_status
+        default: "200"
+      - name: timeout
+        default: "30"
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: HEALTH_URL
+        value: "{{inputs.parameters.health_url}}"
+      - name: EXPECTED_STATUS
+        value: "{{inputs.parameters.expected_status}}"
+      - name: TIMEOUT
+        value: "{{inputs.parameters.timeout}}"
+      source: |
+        set -e
+        echo "[health-check] target_id=$TARGET_ID"
+
+        if [ -n "$HEALTH_URL" ]; then
+          echo "[health-check] checking configured HTTP endpoint"
+          DEADLINE=$(($(date +%s) + TIMEOUT))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$HEALTH_URL" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "$EXPECTED_STATUS" ]; then
+              echo "[health-check] OK: endpoint returned $HTTP_CODE"
+              exit 0
+            fi
+            echo "[health-check] got $HTTP_CODE, want $EXPECTED_STATUS, retrying..."
+            sleep 3
+          done
+          echo "[health-check] FAILED: endpoint did not return $EXPECTED_STATUS within ${TIMEOUT}s"
+          exit 1
+        else
+          echo "[health-check] checking pod readiness via kubectl"
+          TOTAL=$(kubectl get pods -l "app=$TARGET_ID" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "[health-check] FAILED: no pods found for app=$TARGET_ID"
+            exit 1
+          fi
+          kubectl wait --for=condition=Ready pod -l "app=$TARGET_ID" --timeout="${TIMEOUT}s"
+          echo "[health-check] OK: $TOTAL pod(s) Ready"
+        fi
+    retryStrategy:
+      limit: "1"
+      retryPolicy: Always
+      backoff:
+        duration: 10s
+        factor: "2"

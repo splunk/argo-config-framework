@@ -1,0 +1,79 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: "3.12"
+        cache: pip
+
+    - name: Install project and quality tools
+      run: python -m pip install . ruff==0.15.9 yamllint==1.38.0
+
+    - name: Check Python
+      run: |
+        ruff check framework adapters generate.py tests
+        python -m compileall -q framework adapters generate.py tests
+
+    - name: Check YAML
+      run: yamllint .
+
+    - name: Run tests
+      run: python -m unittest discover -s tests -v
+
+    - name: Build wheel
+      run: python -m pip wheel . --no-deps --wheel-dir dist
+
+    - name: Test installed command outside the checkout
+      working-directory: /tmp
+      run: |
+        argo-config-framework --export-base-templates /tmp/base-templates
+        argo-config-framework \
+          --adapter kubernetes \
+          --catalog "$GITHUB_WORKSPACE/examples/nginx/nginx_config.json" \
+          --output /tmp/nginx-workflow.yaml
+        python - <<'PY'
+        from pathlib import Path
+
+        import yaml
+
+        templates = sorted(Path("/tmp/base-templates").glob("*.yaml"))
+        assert len(templates) == 6
+        assert all(yaml.safe_load(path.read_text())["kind"] == "WorkflowTemplate" for path in templates)
+        assert yaml.safe_load(Path("/tmp/nginx-workflow.yaml").read_text())["kind"] == "WorkflowTemplate"
+        PY

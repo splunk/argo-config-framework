@@ -1,0 +1,12 @@
+{
+  "name": "change_gate_check",
+  "description": "Fail if a change management gate blocks this change window.",
+  "argo_task_name": "check-change-gate",
+  "base_template": "ticket_check",
+  "call": "check_change_gate",
+  "inputs": {
+    "ticket_id": "{{inputs.parameters.ticket_id}}",
+    "skip_change_gate": "{{inputs.parameters.skip_change_gate}}"
+  },
+  "when_flag": "change_gate_check_enabled"
+}

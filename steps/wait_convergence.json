@@ -1,0 +1,11 @@
+{
+  "name": "wait_convergence",
+  "description": "Wait until the system reaches the desired state after the patch.",
+  "argo_task_name": "wait-convergence",
+  "base_template": "state_store",
+  "call": "wait_convergence",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "state_store_ref": "{{inputs.parameters.state_store_ref}}"
+  }
+}

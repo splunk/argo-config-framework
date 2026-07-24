@@ -1,0 +1,13 @@
+{
+  "name": "reload_config",
+  "description": "Reload configuration on the target without a full restart.",
+  "argo_task_name": "reload-config",
+  "base_template": "config_agent",
+  "call": "run_task",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "component_role": "{{inputs.parameters.component_role}}",
+    "task_name": "reload_config"
+  },
+  "when_flag": "reload_config_enabled"
+}

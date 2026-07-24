@@ -1,0 +1,98 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.config-verify-v1
+  annotations:
+    description: "Config verification — reads ConfigMap data and best-effort target pod data"
+spec:
+  templates:
+
+  # ── verify ────────────────────────────────────────────────────────────────────
+  # Read desired configuration from the ConfigMap and best-effort data from matching pods.
+  # Outputs a JSON artifact [{host, data}] consumed by check_config_pre/post.
+  - name: verify
+    inputs:
+      parameters:
+      - name: target_id
+      - name: component_role
+        default: ""
+      - name: state_store_ref
+        default: ""
+      - name: conf
+        default: ""
+      - name: stanza
+        default: ""
+    outputs:
+      parameters:
+      - name: results_json
+        valueFrom:
+          path: /tmp/verify_results.json
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: COMPONENT_ROLE
+        value: "{{inputs.parameters.component_role}}"
+      - name: STATE_STORE_REF
+        value: "{{inputs.parameters.state_store_ref}}"
+      source: |
+        set -e
+        echo "[verify] target_id=$TARGET_ID"
+
+        SELECTOR="app=$TARGET_ID"
+        if [ -n "$COMPONENT_ROLE" ]; then
+          SELECTOR="${SELECTOR},component=$COMPONENT_ROLE"
+        fi
+
+        PODS=$(kubectl get pods -l "$SELECTOR" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+
+        echo "[" > /tmp/verify_results.json
+        CM_NAME="${STATE_STORE_REF:-${TARGET_ID}-config}"
+        CM_DATA=$(kubectl get configmap "$CM_NAME" -o jsonpath='{.data}' 2>/dev/null || echo '{}')
+        printf '{"host":"configmap/%s","data":%s,"authoritative":true}' \
+          "$CM_NAME" "$CM_DATA" >> /tmp/verify_results.json
+
+        for POD in $PODS; do
+          echo "[verify] reading from pod: $POD"
+          RAW=$(kubectl exec "$POD" -- sh -c \
+            'cat /etc/config/app.conf 2>/dev/null || cat /etc/nginx/nginx.conf 2>/dev/null || echo ""' \
+            2>/dev/null || true)
+
+          POD_DATA=$(printf '%s' "$RAW" | jq -Rsc '
+            . as $raw
+            | try ($raw | fromjson) catch (
+                $raw
+                | split("\n")
+                | map(gsub("^\\s+|\\s+$"; ""))
+                | map(select(length > 0 and (startswith("#") | not) and contains("=")))
+                | map(
+                    capture("^(?<key>[^=]+)=(?<value>.*)$")
+                    | .key |= gsub("^\\s+|\\s+$"; "")
+                    | .value |= gsub("^\\s+|\\s+$"; "")
+                  )
+                | map({key: .key, value: .value})
+                | from_entries
+              )
+          ' 2>/dev/null || echo '{}')
+          printf ',\n{"host":"%s","data":%s}' "$POD" "$POD_DATA" >> /tmp/verify_results.json
+        done
+
+        echo "]" >> /tmp/verify_results.json
+        echo "[verify] results written:"
+        cat /tmp/verify_results.json

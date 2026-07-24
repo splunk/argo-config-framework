@@ -1,0 +1,18 @@
+[
+  {"name": "get_spec",           "phases": ["precheck"]},
+  {"name": "idempotency_check",  "phases": ["precheck"]},
+  {"name": "health_check",       "phases": ["precheck", "postcheck"]},
+  {"name": "change_gate_check",  "phases": ["precheck"]},
+  {"name": "verify_config",      "phases": ["precheck", "postcheck"]},
+  {"name": "check_config_pre",   "phases": ["precheck"]},
+  {"name": "patch_state_store",  "phases": ["execution"]},
+  {"name": "wait_convergence",   "phases": ["execution"]},
+  {"name": "apply_config_agent", "phases": ["execution"]},
+  {"name": "alert_mute",         "phases": ["execution"]},
+  {"name": "rolling_restart",    "phases": ["execution"]},
+  {"name": "restart_component",  "phases": ["execution"]},
+  {"name": "reload_config",      "phases": ["execution"]},
+  {"name": "check_config_post",  "phases": ["postcheck"]},
+  {"name": "wait_bundle_applied","phases": ["postcheck"]},
+  {"name": "alert_unmute",       "phases": ["postcheck"]}
+]

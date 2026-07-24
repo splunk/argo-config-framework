@@ -1,0 +1,13 @@
+{
+  "name": "rolling_restart",
+  "description": "Perform a rolling restart of the target component.",
+  "argo_task_name": "rolling-restart",
+  "base_template": "config_agent",
+  "call": "run_task",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "component_role": "{{inputs.parameters.component_role}}",
+    "task_name": "rolling_restart"
+  },
+  "when_flag": "rolling_restart_enabled"
+}

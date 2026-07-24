@@ -1,0 +1,12 @@
+{
+  "name": "wait_bundle_applied",
+  "description": "Wait until the config bundle has been distributed to all target nodes.",
+  "argo_task_name": "wait-bundle-applied",
+  "base_template": "state_store",
+  "call": "wait_convergence",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "state_store_ref": "{{inputs.parameters.state_store_ref}}"
+  },
+  "when_flag": "wait_bundle_applied_enabled"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "restart_component",
+  "description": "Restart the target component.",
+  "argo_task_name": "restart-component",
+  "base_template": "config_agent",
+  "call": "run_task",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "component_role": "{{inputs.parameters.component_role}}",
+    "task_name": "restart"
+  },
+  "when_flag": "restart_component_enabled"
+}

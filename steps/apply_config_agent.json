@@ -1,0 +1,11 @@
+{
+  "name": "apply_config_agent",
+  "description": "Trigger the config agent to apply the converged state to the target.",
+  "argo_task_name": "apply-config-agent",
+  "base_template": "config_agent",
+  "call": "run_agent",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "component_role": "{{inputs.parameters.component_role}}"
+  }
+}

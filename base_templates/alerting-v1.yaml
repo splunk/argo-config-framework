@@ -1,0 +1,102 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.alerting-v1
+  annotations:
+    description: >-
+      Generic mute/unmute webhook. Disabled when webhook_url is empty.
+spec:
+  templates:
+
+  # ── alerts ────────────────────────────────────────────────────────────────────
+  # Send a mute or unmute notification to a generic webhook endpoint.
+  # No-op when webhook_url is empty — safe to include in any workflow.
+  - name: alerts
+    inputs:
+      parameters:
+      - name: target_id
+      - name: action
+        # "mute" or "unmute"
+        enum: [mute, unmute]
+      - name: comment
+        default: ""
+      - name: webhook_url
+        default: ""
+      - name: duration_minutes
+        default: "60"
+    script:
+      image: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+      command: [python3]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: ACTION
+        value: "{{inputs.parameters.action}}"
+      - name: COMMENT
+        value: "{{inputs.parameters.comment}}"
+      - name: WEBHOOK_URL
+        value: "{{inputs.parameters.webhook_url}}"
+      - name: DURATION_MINUTES
+        value: "{{inputs.parameters.duration_minutes}}"
+      source: |
+        import json, os, sys, urllib.error, urllib.parse, urllib.request
+
+        target_id   = os.environ["TARGET_ID"]
+        action      = os.environ["ACTION"]
+        comment     = os.environ["COMMENT"]
+        webhook_url = os.environ["WEBHOOK_URL"]
+        duration    = os.environ["DURATION_MINUTES"]
+
+        if not webhook_url:
+            print(f"[alerting] webhook_url is empty — alerting disabled, no-op for action={action}")
+            sys.exit(0)
+
+        parsed_url = urllib.parse.urlsplit(webhook_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError("webhook_url must be an absolute HTTP or HTTPS URL")
+        if parsed_url.username or parsed_url.password:
+            raise ValueError("webhook_url must not contain embedded credentials")
+        if action not in {"mute", "unmute"}:
+            raise ValueError("action must be 'mute' or 'unmute'")
+        duration_minutes = int(duration)
+        if not 1 <= duration_minutes <= 10080:
+            raise ValueError("duration_minutes must be between 1 and 10080")
+
+        payload = json.dumps({
+            "action":    action,
+            "target_id": target_id,
+            "comment":   comment or f"{action} alerts for {target_id}",
+            "duration_minutes": duration_minutes,
+        }).encode()
+
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode()
+                print(f"[alerting] {action} sent to {webhook_url} — status={resp.status} body={body}")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode()
+            print(f"[alerting] ERROR: HTTP {exc.code} from {webhook_url}: {body}")
+            sys.exit(1)
+        except Exception as exc:
+            print(f"[alerting] ERROR: {exc}")
+            sys.exit(1)

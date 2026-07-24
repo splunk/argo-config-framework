@@ -1,0 +1,40 @@
+{
+  "nginx_rate_limit": {
+    "single": {
+      "default_target": "nginx",
+      "targets": {
+        "nginx": {
+          "component_role": "nginx",
+          "apps": {
+            "system": {
+              "state_store_ref":  "nginx-config",
+              "state_store_path": "data.nginx.conf",
+              "inputs": {
+                "app":    {"required": false, "default": "system",       "overridable": true},
+                "conf":   {"required": false, "default": "nginx_rate_limit", "overridable": false},
+                "stanza": {"required": true},
+                "key":    {"required": true},
+                "value":  {"required": true}
+              },
+              "guardrails": {
+                "allowed_apps":        ["system"],
+                "forbidden_apps":      null,
+                "allowed_confs":       ["nginx_rate_limit"],
+                "forbidden_confs":     null,
+                "allowed_stanzas":     ["http"],
+                "forbidden_stanzas":   null,
+                "allowed_keys":         ["rate_limit", "worker_processes", "timeout"],
+                "forbidden_keys":       ["ssl_certificate_key"],
+                "allowed_operations":   ["upsert"],
+                "forbidden_operations": ["remove"]
+              },
+              "precheck":  {"steps": [{"name": "get_spec"}, {"name": "idempotency_check"}, {"name": "health_check"}]},
+              "execution": {"steps": [{"name": "alert_mute"}, {"name": "patch_state_store"}, {"name": "wait_convergence"}, {"name": "apply_config_agent"}]},
+              "postcheck": {"steps": [{"name": "verify_config"}, {"name": "check_config_post"}, {"name": "health_check"}, {"name": "alert_unmute"}]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

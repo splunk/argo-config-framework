@@ -1,0 +1,12 @@
+{
+  "name": "idempotency_check",
+  "description": "Block if any requested change is already applied to the current spec.",
+  "argo_task_name": "check-idempotency",
+  "base_template": "builtin",
+  "call": "idempotency_check",
+  "inputs": {
+    "changes_json": "{{inputs.parameters.changes}}",
+    "spec_json": "{{tasks.get-spec.outputs.parameters.spec_json}}"
+  },
+  "when_flag": "idempotency_check_enabled"
+}

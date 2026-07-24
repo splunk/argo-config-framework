@@ -1,0 +1,13 @@
+{
+  "name": "alert_unmute",
+  "description": "Unmute alerts after all post-change checks pass.",
+  "argo_task_name": "unmute-alerts",
+  "base_template": "alerting",
+  "call": "alerts",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "action": "unmute",
+    "comment": "Unmuting alerts after config change for {{inputs.parameters.target_id}}",
+    "webhook_url": "{{inputs.parameters.notify_webhook_url}}"
+  }
+}

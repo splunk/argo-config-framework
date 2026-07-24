@@ -1,0 +1,17 @@
+{
+  "name": "health_check",
+  "description": "Check target health before and after changes.",
+  "argo_task_name": "check-health-pre",
+  "argo_task_names_by_phase": {
+    "precheck": "check-health-pre",
+    "postcheck": "check-health-post"
+  },
+  "base_template": "health_check",
+  "call": "check",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}"
+  },
+  "when_all": [
+    "inputs.parameters.skip_health_check != \"true\""
+  ]
+}

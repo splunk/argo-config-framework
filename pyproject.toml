@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "argo-config-framework"
+version = "0.1.0"
+description = "Generate catalog-driven Argo WorkflowTemplates for configuration changes."
+authors = [
+    { name = "Manish Singhal", email = "msinghal@splunk.com" },
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["argo", "argo-workflows", "kubernetes", "configuration", "workflow"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "hera>=7.0,<8",
+    "pyyaml>=6.0,<7",
+]
+
+[project.scripts]
+argo-config-framework = "framework.cli:main"
+
+[project.urls]
+repository = "https://github.com/splunk/argo-config-framework"
+
+[tool.hatch.build.targets.wheel]
+packages = ["framework", "adapters"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"pipeline.json" = "framework/data/pipeline.json"
+"wiring.json" = "framework/data/wiring.json"
+"steps_catalog.json" = "framework/data/steps_catalog.json"
+"steps" = "framework/data/steps"
+"base_templates" = "framework/data/base_templates"
+"adapters/kubernetes.json" = "adapters/kubernetes.json"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

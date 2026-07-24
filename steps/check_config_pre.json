@@ -1,0 +1,13 @@
+{
+  "name": "check_config_pre",
+  "description": "Assert that none of the requested changes are already present in config (idempotency pre-check).",
+  "argo_task_name": "check-config-pre",
+  "base_template": "builtin",
+  "call": "config_check",
+  "inputs": {
+    "verify_results": "{{tasks.verify-config-pre.outputs.parameters.results_json}}",
+    "changes_json": "{{inputs.parameters.changes}}",
+    "expect_present": "false"
+  },
+  "when_flag": "check_config_pre_enabled"
+}

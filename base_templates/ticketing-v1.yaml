@@ -1,0 +1,112 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.ticketing-v1
+  annotations:
+    description: "Ticketing — change gate check via HTTP ticket API. No-op when api_url is empty."
+spec:
+  templates:
+
+  # ── check-gate ────────────────────────────────────────────────────────────────
+  # Check whether a change management ticket is in an approved state.
+  # No-op (passes) when api_url is empty or skip_change_gate=true.
+  # Expects the API to return JSON with a "state" or "status" field.
+  - name: check-gate
+    inputs:
+      parameters:
+      - name: ticket_id
+      - name: skip_change_gate
+        default: "false"
+      - name: api_url
+        default: ""
+        # e.g. "https://jira.example.com/rest/api/2/issue"
+      - name: approved_states
+        default: '["In Progress", "Approved", "Open"]'
+    script:
+      image: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+      command: [python3]
+      env:
+      - name: TICKET_ID
+        value: "{{inputs.parameters.ticket_id}}"
+      - name: SKIP_CHANGE_GATE
+        value: "{{inputs.parameters.skip_change_gate}}"
+      - name: API_URL
+        value: "{{inputs.parameters.api_url}}"
+      - name: APPROVED_STATES
+        value: "{{inputs.parameters.approved_states}}"
+      source: |
+        import json, os, sys, urllib.error, urllib.parse, urllib.request
+
+        ticket_id = os.environ["TICKET_ID"]
+        skip = os.environ["SKIP_CHANGE_GATE"].strip().lower() == "true"
+        api_url = os.environ["API_URL"]
+        approved_states = json.loads(os.environ["APPROVED_STATES"])
+
+        if not isinstance(approved_states, list) or not all(
+            isinstance(state, str) for state in approved_states
+        ):
+            raise ValueError("approved_states must be a JSON array of strings")
+
+        if skip:
+            print(f"[ticket-gate] skip_change_gate=true — bypassing gate for {ticket_id}")
+            sys.exit(0)
+
+        if not api_url:
+            print(f"[ticket-gate] api_url is empty — gate disabled, passing for {ticket_id}")
+            sys.exit(0)
+
+        parsed_url = urllib.parse.urlsplit(api_url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise ValueError("api_url must be an absolute HTTP or HTTPS URL")
+        if parsed_url.username or parsed_url.password:
+            raise ValueError("api_url must not contain embedded credentials")
+
+        ticket_path = urllib.parse.quote(ticket_id, safe="")
+        url = f"{api_url.rstrip('/')}/{ticket_path}"
+        print(f"[ticket-gate] checking ticket {ticket_id} at {url}")
+
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            print(f"[ticket-gate] ERROR: HTTP {exc.code} fetching ticket {ticket_id}")
+            sys.exit(1)
+        except Exception as exc:
+            print(f"[ticket-gate] ERROR: {exc}")
+            sys.exit(1)
+
+        # Try common field names for ticket state
+        state = (
+            data.get("fields", {}).get("status", {}).get("name")
+            or data.get("state")
+            or data.get("status")
+            or ""
+        )
+        print(f"[ticket-gate] ticket={ticket_id} state={state!r} approved_states={approved_states}")
+
+        if state not in approved_states:
+            print(
+                f"[ticket-gate] BLOCKED: ticket {ticket_id} is in state {state!r}, "
+                f"which is not in approved states: {approved_states}"
+            )
+            sys.exit(1)
+
+        print(f"[ticket-gate] APPROVED: ticket {ticket_id} is in state {state!r}")

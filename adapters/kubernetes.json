@@ -1,0 +1,23 @@
+{
+  "state_store": {
+    "get_spec":         {"template_name": "argo-config-framework.state-store-v1",   "template": "get-spec"},
+    "patch":            {"template_name": "argo-config-framework.state-store-v1",   "template": "patch"},
+    "wait_convergence": {"template_name": "argo-config-framework.state-store-v1",   "template": "wait-convergence"}
+  },
+  "config_agent": {
+    "run_task":         {"template_name": "argo-config-framework.config-agent-v1",  "template": "run-task"},
+    "run_agent":        {"template_name": "argo-config-framework.config-agent-v1",  "template": "run-agent"}
+  },
+  "config_verify": {
+    "verify":           {"template_name": "argo-config-framework.config-verify-v1", "template": "verify"}
+  },
+  "health_check": {
+    "check":            {"template_name": "argo-config-framework.health-check-v1",  "template": "check"}
+  },
+  "alerting": {
+    "alerts":           {"template_name": "argo-config-framework.alerting-v1",      "template": "alerts"}
+  },
+  "ticket_check": {
+    "check_change_gate": {"template_name": "argo-config-framework.ticketing-v1",    "template": "check-gate"}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "get_spec",
+  "description": "Fetch the current desired-state document from the state store. Runs first in precheck so its spec artifact is available to idempotency_check.",
+  "argo_task_name": "get-spec",
+  "base_template": "state_store",
+  "call": "get_spec",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "state_store_ref": "{{inputs.parameters.state_store_ref}}"
+  }
+}

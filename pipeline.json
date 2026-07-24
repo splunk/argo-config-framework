@@ -1,0 +1,24 @@
+{
+  "_comment": "Run DAG pipeline — dependency chain for outer orchestration. 'depends' uses SSO (Succeeded||Skipped||Omitted). 'depends_expr' is a raw Argo expression. 'when' is the run_mode guard.",
+
+  "validate-input":  {},
+
+  "resolve-conf":    { "depends": ["validate-input"] },
+  "enforce-inputs":  { "depends": ["resolve-conf"] },
+  "build-patch":     { "depends": ["enforce-inputs"] },
+
+  "pre-checks": {
+    "depends": ["enforce-inputs"],
+    "when": "{{=inputs.parameters.run_mode != \"only_postcheck\"}}"
+  },
+
+  "execution": {
+    "depends_expr": "build-patch.Succeeded && (pre-checks.Succeeded || pre-checks.Skipped || pre-checks.Omitted)",
+    "when": "{{=inputs.parameters.run_mode == \"full\"}}"
+  },
+
+  "post-checks": {
+    "depends_expr": "execution.Succeeded || execution.Skipped",
+    "when": "{{=inputs.parameters.run_mode != \"only_precheck\"}}"
+  }
+}

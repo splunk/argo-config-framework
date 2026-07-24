@@ -1,0 +1,19 @@
+{
+  "name": "verify_config",
+  "description": "Run config verification on target nodes.",
+  "argo_task_name": "verify-config-pre",
+  "argo_task_names_by_phase": {
+    "precheck": "verify-config-pre",
+    "postcheck": "verify-config-post"
+  },
+  "base_template": "config_verify",
+  "call": "verify",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "component_role": "{{inputs.parameters.component_role}}",
+    "state_store_ref": "{{inputs.parameters.state_store_ref}}",
+    "conf": "{{inputs.parameters.conf}}",
+    "stanza": "{{inputs.parameters.stanza}}"
+  },
+  "when_flag": "verify_config_enabled"
+}

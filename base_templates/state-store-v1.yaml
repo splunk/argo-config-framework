@@ -1,0 +1,124 @@
+# Copyright 2026 Splunk Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: argo-config-framework.state-store-v1
+  annotations:
+    description: "State store operations — get-spec, patch, wait-convergence using kubectl and ConfigMaps"
+spec:
+  templates:
+
+  # ── get-spec ─────────────────────────────────────────────────────────────────
+  # Fetch the current desired-state document from a Kubernetes ConfigMap.
+  # Writes the full ConfigMap JSON to /tmp/spec.json as an output artifact.
+  - name: get-spec
+    inputs:
+      parameters:
+      - name: target_id
+      - name: state_store_ref
+    outputs:
+      parameters:
+      - name: spec_json
+        valueFrom:
+          path: /tmp/spec.json
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: STATE_STORE_REF
+        value: "{{inputs.parameters.state_store_ref}}"
+      source: |
+        set -e
+        echo "[get-spec] fetching configmap: $STATE_STORE_REF"
+        kubectl get configmap "$STATE_STORE_REF" -o json > /tmp/spec.json
+        echo "[get-spec] spec written to /tmp/spec.json"
+        echo "[get-spec] keys in configmap:"
+        kubectl get configmap "$STATE_STORE_REF" -o jsonpath='{.data}' | tr ',' '\n'
+    retryStrategy:
+      limit: "1"
+      retryPolicy: Always
+      backoff:
+        duration: 10s
+        factor: "2"
+
+  # ── patch ─────────────────────────────────────────────────────────────────────
+  # Apply a JSON patch expression to the ConfigMap.
+  # patch_expression must be a valid kubectl --patch JSON string, e.g.:
+  #   {"data": {"rate_limit": "20r/s"}}
+  - name: patch
+    inputs:
+      parameters:
+      - name: target_id
+      - name: state_store_ref
+      - name: patch_expression
+      - name: change_reason
+        default: ""
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: STATE_STORE_REF
+        value: "{{inputs.parameters.state_store_ref}}"
+      - name: PATCH_EXPRESSION
+        value: "{{inputs.parameters.patch_expression}}"
+      - name: CHANGE_REASON
+        value: "{{inputs.parameters.change_reason}}"
+      source: |
+        set -e
+        echo "[patch] target_id=$TARGET_ID"
+        echo "[patch] state_store_ref=$STATE_STORE_REF"
+        echo "[patch] reason=$CHANGE_REASON"
+        kubectl patch configmap "$STATE_STORE_REF" \
+          --type=merge \
+          --patch "$PATCH_EXPRESSION"
+        echo "[patch] configmap patched successfully"
+        echo "[patch] current state:"
+        kubectl get configmap "$STATE_STORE_REF" -o jsonpath='{.data}' | tr ',' '\n'
+
+  # ── wait-convergence ──────────────────────────────────────────────────────────
+  # Wait until the target deployment reaches desired state after the patch.
+  # Uses kubectl rollout status — generic for any Deployment.
+  - name: wait-convergence
+    inputs:
+      parameters:
+      - name: target_id
+      - name: state_store_ref
+        default: ""
+      - name: timeout
+        default: "300s"
+    script:
+      image: bitnami/kubectl@sha256:95de17e6eb92da83a58c90a9df0c4cede634f898d2e6b92ea04f4a6ee6ace08d
+      command: [sh]
+      env:
+      - name: TARGET_ID
+        value: "{{inputs.parameters.target_id}}"
+      - name: TIMEOUT
+        value: "{{inputs.parameters.timeout}}"
+      source: |
+        set -e
+        echo "[wait-convergence] waiting for deployment/$TARGET_ID to converge"
+        kubectl rollout status "deployment/$TARGET_ID" --timeout="$TIMEOUT"
+        echo "[wait-convergence] deployment is ready"
+        echo "[wait-convergence] pod status:"
+        kubectl get pods -l "app=$TARGET_ID" --no-headers
+    retryStrategy:
+      limit: "1"
+      retryPolicy: Always
+      backoff:
+        duration: 10s
+        factor: "2"

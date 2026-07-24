@@ -1,0 +1,33 @@
+{
+  "_comment": "DAG wiring for all three phases. Each entry lists steps that must complete (Succeeded|Skipped|Omitted) before this step starts. Empty array = start immediately.",
+
+  "precheck": {
+    "_comment": "get_spec runs first; idempotency_check waits for it so spec artifact is available.",
+    "get_spec":           [],
+    "idempotency_check":  ["get_spec"],
+    "health_check":       [],
+    "change_gate_check":  [],
+    "verify_config":      [],
+    "check_config_pre":   ["verify_config"]
+  },
+
+  "execution": {
+    "_comment": "Linear: alert_mute → patch_state_store → wait_convergence → apply_config_agent → restart/reload (optional, only one enabled per run).",
+    "alert_mute":         [],
+    "patch_state_store":  ["alert_mute"],
+    "wait_convergence":   ["patch_state_store"],
+    "apply_config_agent": ["wait_convergence"],
+    "rolling_restart":    ["apply_config_agent"],
+    "restart_component":  ["apply_config_agent"],
+    "reload_config":      ["apply_config_agent"]
+  },
+
+  "postcheck": {
+    "_comment": "verify_config and wait_bundle_applied run first; check_config_post waits for verify; health_check waits for both; alert_unmute waits for health_check.",
+    "verify_config":       [],
+    "wait_bundle_applied": [],
+    "check_config_post":   ["verify_config"],
+    "health_check":        ["verify_config", "wait_bundle_applied"],
+    "alert_unmute":        ["health_check"]
+  }
+}

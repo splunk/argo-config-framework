@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+output/
+*.yaml.bak
+.DS_Store
+.idea/
+
+# Local development records
+.structured-dev-state
+implementation-log.md
+plan.md
+research.md

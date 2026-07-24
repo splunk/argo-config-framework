@@ -1,0 +1,13 @@
+{
+  "name": "alert_mute",
+  "description": "Mute alerts before making impactful changes.",
+  "argo_task_name": "mute-alerts",
+  "base_template": "alerting",
+  "call": "alerts",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "action": "mute",
+    "comment": "Muting alerts during config change for {{inputs.parameters.target_id}}",
+    "webhook_url": "{{inputs.parameters.notify_webhook_url}}"
+  }
+}

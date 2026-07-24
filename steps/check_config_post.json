@@ -1,0 +1,13 @@
+{
+  "name": "check_config_post",
+  "description": "Assert that all requested changes are now present in config.",
+  "argo_task_name": "check-config-post",
+  "base_template": "builtin",
+  "call": "config_check",
+  "inputs": {
+    "verify_results": "{{tasks.verify-config-post.outputs.parameters.results_json}}",
+    "changes_json": "{{inputs.parameters.changes}}",
+    "expect_present": "true"
+  },
+  "when_flag": "check_config_post_enabled"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "patch_state_store",
+  "description": "Apply the patch expression to the state store document.",
+  "argo_task_name": "patch-state-store",
+  "base_template": "state_store",
+  "call": "patch",
+  "inputs": {
+    "target_id": "{{inputs.parameters.target_id}}",
+    "state_store_ref": "{{inputs.parameters.state_store_ref}}",
+    "patch_expression": "{{inputs.parameters.patch_expression}}",
+    "change_reason": "{{inputs.parameters.change_reason}}"
+  }
+}
